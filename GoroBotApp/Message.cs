@@ -24,12 +24,18 @@ namespace GoroBotApp
         public long timestamp { get; set; }
         public Source source { get; set; }
         public Message message { get; set; }
+        public Postback postback { get; set; }
     }
 
     public class Source
     {
         public string type { get; set; }
         public string userId { get; set; }
+    }
+
+    public class Postback
+    {
+        public string data { get; set; }
     }
 
     public class Message
