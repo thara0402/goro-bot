@@ -19,6 +19,7 @@ namespace GoroBotApp
     {
         private const string _replyUrl = "https://api.line.me/v2/bot/message/reply";
         private static HttpClient _httpClient = new HttpClient();
+        private static HttpClient _httpClient2 = new HttpClient();
 
         [FunctionName("BotFunction")]
         public static async Task<IActionResult> Run(
@@ -45,7 +46,7 @@ namespace GoroBotApp
                         break;
                     case "location":
                         log.LogInformation("title is : " + data.events[0].message.title);
-                        var quickReplyMessage = GetQuickReplyMessage(0, 0);
+                        var quickReplyMessage = await GetQuickReplyMessageAsync(data.events[0].message.latitude, data.events[0].message.longitude);
                         await SendQuickReplyAsync(data.events[0].replyToken, quickReplyMessage);
                         break;
                     default:
@@ -67,14 +68,24 @@ namespace GoroBotApp
             return new OkResult();
         }
 
-        private static string GetQuickReplyMessage(float lat, float lng)
+        private static async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
         {
-            var result = new StringBuilder();
-            result.Append("近くにいいお店があるよ。どこに行きたい？" + Environment.NewLine);
-            result.Append(String.Format("１：{0}（{1}）", "大阪府美章園のお好み焼き定食と平野の串かつ", "甘辛や") + Environment.NewLine);
-            result.Append(String.Format("２：{0}（{1}）", "東京都新宿区淀橋市場の豚バラ生姜焼定食", "伊勢屋食堂") + Environment.NewLine);
-            result.Append(String.Format("３：{0}（{1}）", "東京都目黒区三田のチキンと野菜の薬膳スープカレー", "シャナイア") + Environment.NewLine);
-            return result.ToString();
+            var response = await _httpClient2.GetAsync(String.Format("https://goro-api.azurewebsites.net/api/Gourmet/{0}/{1}", lat, lng));
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+            var gourmets = JsonConvert.DeserializeObject<List<Gourmet>>(json);
+
+            var result = new QuickReplyMessage { Gourmets = new List<Gourmet>() };
+            for (int i = 0; i < 3; i++)
+            {
+                if (i == 0)
+                {
+                    result.Text = "近くにいいお店があるよ。どこに行きたい？" + Environment.NewLine;
+                }
+                result.Text += String.Format("{0}：{1}（{2}）", i + 1, gourmets[i].Title, gourmets[i].Restaurant) + Environment.NewLine;
+                result.Gourmets.Add(gourmets[i]);
+            }
+            return result;
         }
 
         private static bool ValidateSignature(string signature, string requestBody, string channelSecret)
@@ -125,10 +136,26 @@ namespace GoroBotApp
             response.EnsureSuccessStatusCode();
         }
 
-        private static async Task SendQuickReplyAsync(string replyToken, string message)
+        private static async Task SendQuickReplyAsync(string replyToken, QuickReplyMessage message)
         {
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Settings.AccessToken);
+
+            var items = new List<QuickReplyItem>();
+            for (int i = 0; i < message.Gourmets.Count; i++)
+            {
+                items.Add(new QuickReplyItem
+                {
+                    type = "action",
+                    action = new QuickReplyAction
+                    {
+                        type = "postback",
+                        label = String.Format("{0}番目", i + 1),
+                        data = message.Gourmets[i].Matome,
+                        displayText = "ん～いいねぇ"
+                    }
+                });
+            }
 
             var replyBody = new ReplyObject
             {
@@ -137,41 +164,9 @@ namespace GoroBotApp
                 {
                     new Message{
                         type = "text",
-                        text = message,
+                        text = message.Text,
                         quickReply = new QuickReplyItems{
-                            items = new List<QuickReplyItem>
-                            {
-                                new QuickReplyItem{
-                                    type = "action",
-                                    action = new QuickReplyAction
-                                    {
-                                        type = "postback",
-                                        label = "１番目",
-                                        data = "https://tabelog.com/tokyo/A1318/A131801/13020966/",
-                                        displayText = "ん～いいねぇ"
-                                    }
-                                },
-                                new QuickReplyItem{
-                                    type = "action",
-                                    action = new QuickReplyAction
-                                    {
-                                        type = "postback",
-                                        label = "２番目",
-                                        data = "https://tabelog.com/tokyo/A1318/A131801/13020966/",
-                                        displayText = "ん～いいねぇ"
-                                    }
-                                },
-                                new QuickReplyItem{
-                                    type = "action",
-                                    action = new QuickReplyAction
-                                    {
-                                        type = "postback",
-                                        label = "３番目",
-                                        data = "https://tabelog.com/tokyo/A1318/A131801/13020966/",
-                                        displayText = "ん～いいねぇ"
-                                    }
-                                },
-                            }
+                            items = items
                         }
                     }
                 }

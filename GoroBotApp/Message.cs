@@ -4,6 +4,12 @@ using System.Text;
 
 namespace GoroBotApp
 {
+    public class QuickReplyMessage
+    {
+        public string Text { get; set; }
+        public List<Gourmet> Gourmets { get; set; }
+    }
+
     public class ReplyObject
     {
         public string replyToken { get; set; }
