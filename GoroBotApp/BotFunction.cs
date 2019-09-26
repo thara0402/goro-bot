@@ -12,24 +12,33 @@ using System.Net.Http.Headers;
 using System.Collections.Generic;
 using System.Text;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
 
 namespace GoroBotApp
 {
-    public static class BotFunction
+    public class BotFunction
     {
         private const string _replyUrl = "https://api.line.me/v2/bot/message/reply";
-        private static HttpClient _httpClient = new HttpClient();
-        private static HttpClient _httpClient2 = new HttpClient();
+        private readonly MyOptions _options;
+        private readonly HttpClient _httpClient;
+        private readonly HttpClient _httpClient2;
+
+        public BotFunction(IOptions<MyOptions> options, IHttpClientFactory httpClientFactory)
+        {
+            _options = options.Value;
+            _httpClient = httpClientFactory.CreateClient();
+            _httpClient2 = httpClientFactory.CreateClient();
+        }
 
         [FunctionName("BotFunction")]
-        public static async Task<IActionResult> Run(
+        public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
             ILogger log)
         {
             req.Headers.TryGetValue("X-Line-Signature", out var xlinesignature);
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             log.LogInformation("requestBody is : " + requestBody);
-            if (!ValidateSignature(xlinesignature, requestBody, Settings.ChannelSecret))
+            if (!ValidateSignature(xlinesignature, requestBody, _options.LineChannelSecret))
             {
                 log.LogInformation("Signature verification fail.");
                 return new BadRequestResult();
@@ -68,7 +77,7 @@ namespace GoroBotApp
             return new OkResult();
         }
 
-        private static async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
+        private async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
         {
             var response = await _httpClient2.GetAsync(String.Format("https://goro-api.azurewebsites.net/api/Gourmet/{0}/{1}", lat, lng));
             response.EnsureSuccessStatusCode();
@@ -88,7 +97,7 @@ namespace GoroBotApp
             return result;
         }
 
-        private static bool ValidateSignature(string signature, string requestBody, string channelSecret)
+        private bool ValidateSignature(string signature, string requestBody, string channelSecret)
         {
             var textBytes = Encoding.UTF8.GetBytes(requestBody);
             var keyBytes = Encoding.UTF8.GetBytes(channelSecret);
@@ -102,10 +111,10 @@ namespace GoroBotApp
             }
         }
 
-        private static async Task SendQuickReplyForLocationAsync(string replyToken)
+        private async Task SendQuickReplyForLocationAsync(string replyToken)
         {
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Settings.AccessToken);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
 
             var replyBody = new ReplyObject
             {
@@ -136,10 +145,10 @@ namespace GoroBotApp
             response.EnsureSuccessStatusCode();
         }
 
-        private static async Task SendQuickReplyAsync(string replyToken, QuickReplyMessage message)
+        private async Task SendQuickReplyAsync(string replyToken, QuickReplyMessage message)
         {
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Settings.AccessToken);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
 
             var items = new List<QuickReplyItem>();
             for (int i = 0; i < message.Gourmets.Count; i++)
@@ -176,10 +185,10 @@ namespace GoroBotApp
             response.EnsureSuccessStatusCode();
         }
 
-        private static async Task SendReplyAsync(string replyToken, string message)
+        private async Task SendReplyAsync(string replyToken, string message)
         {
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Settings.AccessToken);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
 
             var replyBody = new ReplyObject
             {
