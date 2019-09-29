@@ -13,21 +13,23 @@ using System.Collections.Generic;
 using System.Text;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
+using GoroBotApp.Models;
 
 namespace GoroBotApp
 {
     public class BotFunction
     {
         private const string _replyUrl = "https://api.line.me/v2/bot/message/reply";
+        private const string _gourmetUrl = "https://goro-api.azurewebsites.net/api/Gourmet";
         private readonly MyOptions _options;
-        private readonly HttpClient _httpClient;
-        private readonly HttpClient _httpClient2;
+        private readonly HttpClient _lineClient;
+        private readonly HttpClient _gourmetClient;
 
         public BotFunction(IOptions<MyOptions> options, IHttpClientFactory httpClientFactory)
         {
             _options = options.Value;
-            _httpClient = httpClientFactory.CreateClient();
-            _httpClient2 = httpClientFactory.CreateClient();
+            _lineClient = httpClientFactory.CreateClient();
+            _gourmetClient = httpClientFactory.CreateClient();
         }
 
         [FunctionName("BotFunction")]
@@ -55,46 +57,25 @@ namespace GoroBotApp
                         break;
                     case "location":
                         log.LogInformation("title is : " + data.events[0].message.title);
-                        var quickReplyMessage = await GetQuickReplyMessageAsync(data.events[0].message.latitude, data.events[0].message.longitude);
-                        await SendQuickReplyAsync(data.events[0].replyToken, quickReplyMessage);
+                        await SendQuickReplyAsync(data.events[0].replyToken, data.events[0].message.latitude, data.events[0].message.longitude);
                         break;
                     default:
                         log.LogInformation("data.events[0].message.type is : " + data.events[0].message.type);
-                        await SendReplyAsync(data.events[0].replyToken, "なんて答えるのが正解なんだ？");
+                        await SendMessageReplyAsync(data.events[0].replyToken, "なんて答えるのが正解なんだ？");
                         break;
                 }
             }
             else if (data.events[0].type == "postback")
             {
                 log.LogInformation("data is : " + data.events[0].postback.data);
-                await SendReplyAsync(data.events[0].replyToken, data.events[0].postback.data);
+                await SendMessageReplyAsync(data.events[0].replyToken, data.events[0].postback.data);
             }
             else
             {
                 log.LogInformation("data.events[0].type is : " + data.events[0].type);
-                await SendReplyAsync(data.events[0].replyToken, "なんて答えるのが正解なんだ？");
+                await SendMessageReplyAsync(data.events[0].replyToken, "なんて答えるのが正解なんだ？");
             }
             return new OkResult();
-        }
-
-        private async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
-        {
-            var response = await _httpClient2.GetAsync(String.Format("https://goro-api.azurewebsites.net/api/Gourmet/{0}/{1}", lat, lng));
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync();
-            var gourmets = JsonConvert.DeserializeObject<List<Gourmet>>(json);
-
-            var result = new QuickReplyMessage { Gourmets = new List<Gourmet>() };
-            for (int i = 0; i < 3; i++)
-            {
-                if (i == 0)
-                {
-                    result.Text = "近くにいいお店があるよ。どこに行きたい？" + Environment.NewLine;
-                }
-                result.Text += String.Format("{0}：{1}（{2}）", i + 1, gourmets[i].Title, gourmets[i].Restaurant) + Environment.NewLine;
-                result.Gourmets.Add(gourmets[i]);
-            }
-            return result;
         }
 
         private bool ValidateSignature(string signature, string requestBody, string channelSecret)
@@ -113,96 +94,96 @@ namespace GoroBotApp
 
         private async Task SendQuickReplyForLocationAsync(string replyToken)
         {
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
-
-            var replyBody = new ReplyObject
-            {
-                replyToken = replyToken,
-                messages = new List<Message>()
+            var actions = new List<QuickReplyAction>{
+                new QuickReplyAction
                 {
-                    new Message{
-                        type = "text",
-                        text = "いまどこ？",
-                        quickReply = new QuickReplyItems{
-                            items = new List<QuickReplyItem>
-                            {
-                                new QuickReplyItem{
-                                    type = "action",
-                                    action = new QuickReplyAction
-                                    {
-                                        type = "location",
-                                        label = "ロケーション"
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    type = "location",
+                    label = "ロケーション"
                 }
             };
-
-            var response = await _httpClient.PostAsJsonAsync(_replyUrl, replyBody);
-            response.EnsureSuccessStatusCode();
+            await SendQuickReplyAsync(replyToken, "いまどこ？", actions);
         }
 
-        private async Task SendQuickReplyAsync(string replyToken, QuickReplyMessage message)
+        private async Task SendQuickReplyAsync(string replyToken, float lat, float lng)
         {
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
+            var quickReplyMessage = await GetQuickReplyMessageAsync(lat, lng);
 
+            var actions = new List<QuickReplyAction>();
+            for (int i = 0; i < quickReplyMessage.Gourmets.Count; i++)
+            {
+                actions.Add(new QuickReplyAction
+                {
+                    type = "postback",
+                    label = String.Format("{0}番目", i + 1),
+                    data = quickReplyMessage.Gourmets[i].Matome,
+                    displayText = "ん～いいねぇ"
+                });
+            }
+            await SendQuickReplyAsync(replyToken, quickReplyMessage.Text, actions);
+        }
+
+        private async Task SendQuickReplyAsync(string replyToken, string text, List<QuickReplyAction> actions)
+        {
             var items = new List<QuickReplyItem>();
-            for (int i = 0; i < message.Gourmets.Count; i++)
+            foreach (var action in actions)
             {
                 items.Add(new QuickReplyItem
                 {
                     type = "action",
-                    action = new QuickReplyAction
-                    {
-                        type = "postback",
-                        label = String.Format("{0}番目", i + 1),
-                        data = message.Gourmets[i].Matome,
-                        displayText = "ん～いいねぇ"
-                    }
+                    action = action
                 });
             }
 
-            var replyBody = new ReplyObject
+            var message = new Message
             {
-                replyToken = replyToken,
-                messages = new List<Message>()
-                {
-                    new Message{
-                        type = "text",
-                        text = message.Text,
-                        quickReply = new QuickReplyItems{
-                            items = items
-                        }
-                    }
-                }
+                type = "text",
+                text = text,
+                quickReply = new QuickReplyItems{ items = items }
             };
-
-            var response = await _httpClient.PostAsJsonAsync(_replyUrl, replyBody);
-            response.EnsureSuccessStatusCode();
+            await SendReplyAsync(replyToken, message);
         }
 
-        private async Task SendReplyAsync(string replyToken, string message)
+        private async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
         {
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
+            var response = await _gourmetClient.GetAsync(String.Format("{0}/{1}/{2}", _gourmetUrl, lat, lng));
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+            var gourmets = JsonConvert.DeserializeObject<List<Gourmet>>(json);
 
-            var replyBody = new ReplyObject
+            var result = new QuickReplyMessage { Gourmets = new List<Gourmet>() };
+            for (int i = 0; i < 3; i++)
+            {
+                if (i == 0)
+                {
+                    result.Text = "近くにいいお店があるよ。どこに行きたい？" + Environment.NewLine;
+                }
+                result.Text += String.Format("{0}：{1}（{2}）", i + 1, gourmets[i].Title, gourmets[i].Restaurant) + Environment.NewLine;
+                result.Gourmets.Add(gourmets[i]);
+            }
+            return result;
+        }
+
+        private async Task SendMessageReplyAsync(string replyToken, string text)
+        {
+            var message = new Message
+            {
+                type = "text",
+                text = text
+            };
+            await SendReplyAsync(replyToken, message);
+        }
+
+        private async Task SendReplyAsync(string replyToken, Message message)
+        {
+            _lineClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _lineClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LineAccessToken);
+
+            var replyObject = new ReplyObject
             {
                 replyToken = replyToken,
-                messages = new List<Message>()
-                {
-                    new Message{
-                        type = "text",
-                        text = message
-                    }
-                }
+                messages = new List<Message> { message }
             };
-
-            var response = await _httpClient.PostAsJsonAsync(_replyUrl, replyBody);
+            var response = await _lineClient.PostAsJsonAsync(_replyUrl, replyObject);
             response.EnsureSuccessStatusCode();
         }
     }

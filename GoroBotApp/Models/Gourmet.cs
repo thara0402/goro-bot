@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace GoroBotApp
+namespace GoroBotApp.Models
 {
     public class Gourmet
     {
