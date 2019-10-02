@@ -20,8 +20,6 @@ namespace GoroBotApp
 {
     public class LineBotFunction
     {
-        private const string _replyUrl = "https://api.line.me/v2/bot/message/reply";
-        private const string _gourmetUrl = "https://goro-api.azurewebsites.net/api/Gourmet";
         private readonly MyOptions _options;
         private readonly HttpClient _lineClient;
         private readonly HttpClient _gourmetClient;
@@ -113,7 +111,7 @@ namespace GoroBotApp
                 actions.Add(new QuickReplyAction
                 {
                     type = "postback",
-                    label = String.Format("{0}î‘ñ⁄", i + 1),
+                    label = String.Format("{0}åèñ⁄", i + 1),
                     data = quickReplyMessage.Gourmets[i].Matome,
                     displayText = "ÇÒÅ`Ç¢Ç¢ÇÀÇ•"
                 });
@@ -158,7 +156,7 @@ namespace GoroBotApp
 
         private async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
         {
-            var response = await _gourmetClient.GetAsync(String.Format("{0}/{1}/{2}", _gourmetUrl, lat, lng));
+            var response = await _gourmetClient.GetAsync(String.Format("{0}/{1}/{2}", _options.GourmetApiUrl, lat, lng));
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
             var gourmets = JsonConvert.DeserializeObject<List<Gourmet>>(json);
@@ -207,7 +205,7 @@ namespace GoroBotApp
                 replyToken = replyToken,
                 messages = new List<Message> { message }
             };
-            var response = await _lineClient.PostAsJsonAsync(_replyUrl, replyObject);
+            var response = await _lineClient.PostAsJsonAsync(_options.LineMessageApiUrl, replyObject);
             response.EnsureSuccessStatusCode();
         }
 
