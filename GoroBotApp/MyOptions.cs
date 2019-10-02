@@ -8,5 +8,7 @@ namespace GoroBotApp
     {
         public string LineAccessToken { get; set; }
         public string LineChannelSecret { get; set; }
+        public string LineMessageApiUrl { get; set; }
+        public string GourmetApiUrl { get; set; }
     }
 }
