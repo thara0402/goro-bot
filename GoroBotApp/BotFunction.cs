@@ -30,9 +30,9 @@ namespace GoroBotApp
             _gourmetClient = httpClientFactory.CreateClient();
         }
 
-        [FunctionName("BotFunction")]
+        [FunctionName(nameof(BotFunction))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "v1/linebots")] HttpRequest req,
             ILogger log)
         {
             req.Headers.TryGetValue("X-Line-Signature", out var xlinesignature);
