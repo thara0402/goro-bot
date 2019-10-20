@@ -112,7 +112,7 @@ namespace GoroBotApp
                 actions.Add(new QuickReplyAction
                 {
                     type = "postback",
-                    label = String.Format("{0}件目", i + 1),
+                    label = quickReplyMessage.Gourmets[i].Restaurant,
                     data = quickReplyMessage.Gourmets[i].Matome,
                     displayText = "ん～いいねぇ"
                 });
@@ -143,7 +143,7 @@ namespace GoroBotApp
 
         private async Task<QuickReplyMessage> GetQuickReplyMessageAsync(float lat, float lng)
         {
-            var response = await _gourmetClient.GetAsync(String.Format("{0}/{1}/{2}", _options.GourmetApiUrl, lat, lng));
+            var response = await _gourmetClient.GetAsync($"{_options.GourmetApiUrl}/{lat}/{lng}");
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
             var gourmets = JsonConvert.DeserializeObject<List<Gourmet>>(json);
@@ -153,9 +153,9 @@ namespace GoroBotApp
             {
                 if (i == 0)
                 {
-                    result.Text = "近くにいいお店があるよ。どこに行きたい？" + Environment.NewLine;
+                    result.Text = "近くにいいお店があるよ。" + Environment.NewLine;
                 }
-                result.Text += String.Format("{0}：{1}（{2}）", i + 1, gourmets[i].Title, gourmets[i].Restaurant) + Environment.NewLine;
+                result.Text += $"{i + 1}：{gourmets[i].Title}（{gourmets[i].Restaurant}）" + Environment.NewLine;
                 result.Gourmets.Add(gourmets[i]);
             }
             return result;
